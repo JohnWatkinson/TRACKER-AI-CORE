@@ -74,7 +74,6 @@ def fetch_daily_stats(client, start_date, end_date):
             "eventCount": int(row.metric_values[7].value),
         }
         records.append(record)
-
     return records
 
 # === SAVE RESULTS ===
@@ -101,6 +100,7 @@ def run_ga4():
     today = datetime.now(timezone.utc).date()
     last_date = get_latest_date(OUTPUT_FILE)
     next_day = last_date + timedelta(days=1)
+    # next_day = datetime(2025, 2, 1, tzinfo=timezone.utc).date()  # or even earlier if needed
 
     if next_day >= today:
         print("[ ] No new GA4 data.")
