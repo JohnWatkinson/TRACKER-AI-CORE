@@ -16,3 +16,5 @@ pandas==2.2.2
 # CLI and utility tools
 python-dateutil>=2.9.0
 tqdm>=4.66.4
+
+python-dotenv>=1.0.1

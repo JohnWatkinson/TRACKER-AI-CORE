@@ -1,70 +1,77 @@
+# Code/scripts/fetch_gsc.py
+
 import os
 import pandas as pd
-from dotenv import load_dotenv
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
+
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# Load env vars
-load_dotenv()
-
-# Config from .env
-GSC_CLIENT_EMAIL = os.getenv("GSC_CLIENT_EMAIL")
-GSC_PRIVATE_KEY = os.getenv("GSC_PRIVATE_KEY").replace('\\n', '\n')
-PROPERTY_URL = os.getenv("GSC_PROPERTY_URL")
-OUTPUT_PATH = 'data/gsc/gsc_overview.csv'
-
+CREDENTIALS_PATH = "config/tracker-ai-core-58a5e68590e5.json"
+PROPERTY_URL = "https://www.maisonguida.com/"
+SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
+DATA_PATH = "data/gsc/"
+DIMENSIONS = ["query", "page", "country", "device", "date"]
 
 def get_gsc_service():
-    creds_info = {
-        "type": "service_account",
-        "client_email": GSC_CLIENT_EMAIL,
-        "private_key": GSC_PRIVATE_KEY,
-        "token_uri": "https://oauth2.googleapis.com/token"
-    }
-    creds = service_account.Credentials.from_service_account_info(
-        creds_info,
-        scopes=["https://www.googleapis.com/auth/webmasters.readonly"]
-    )
+    creds = service_account.Credentials.from_service_account_file(CREDENTIALS_PATH, scopes=SCOPES)
     return build("searchconsole", "v1", credentials=creds)
 
-def fetch_gsc_overview(start_date, end_date):
-    service = get_gsc_service()
-    request = {
-        'startDate': start_date,
-        'endDate': end_date,
-        'aggregationType': 'auto',
-        'dimensions': [],
-    }
-    response = service.searchanalytics().query(siteUrl=PROPERTY_URL, body=request).execute()
-    if 'rows' not in response:
-        return None
-
-    row = response['rows'][0]
-    return {
-        'date_start': start_date,
-        'date_end': end_date,
-        'clicks': row.get('clicks', 0),
-        'impressions': row.get('impressions', 0),
-        'ctr': row.get('ctr', 0),
-        'position': row.get('position', 0)
-    }
-
-def save_to_csv(data, output_file):
-    df = pd.DataFrame([data])
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    if os.path.exists(output_file):
-        df.to_csv(output_file, mode='a', header=False, index=False)
+def get_latest_date(file_path):
+    if os.path.exists(file_path):
+        df = pd.read_csv(file_path, parse_dates=["date"])
+        latest = df["date"].max().date()
+        return latest + timedelta(days=1)
     else:
-        df.to_csv(output_file, index=False)
+        return datetime.now(timezone.utc).date() - timedelta(days=3)
 
-def run(start_days_ago=7, end_days_ago=1):
-    end_date = datetime.utcnow() - timedelta(days=end_days_ago)
-    start_date = datetime.utcnow() - timedelta(days=start_days_ago)
-    data = fetch_gsc_overview(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-    if data:
-        save_to_csv(data, OUTPUT_PATH)
-        print(f"[✓] GSC overview data saved: {OUTPUT_PATH}")
+def fetch_and_append(service, dimension):
+    output_file = os.path.join(DATA_PATH, f"master_{dimension}s.csv")
+    file_path = output_file
+    start_date = get_latest_date(file_path)
+    end_date = datetime.now(timezone.utc).date() - timedelta(days=2)  # GSC delay
+    current_date = start_date
+    all_records = []
+
+    while current_date <= end_date:
+        request = {
+            "startDate": current_date.strftime("%Y-%m-%d"),
+            "endDate": current_date.strftime("%Y-%m-%d"),
+            "dimensions": [] if dimension == "date" else [dimension],
+            "rowLimit": 25000
+        }
+
+        response = service.searchanalytics().query(siteUrl=PROPERTY_URL, body=request).execute()
+        rows = response.get("rows", [])
+
+        for row in rows:
+            record = {
+                "date": current_date.strftime("%Y-%m-%d"),
+                "clicks": row.get("clicks", 0),
+                "impressions": row.get("impressions", 0),
+                "ctr": row.get("ctr", 0),
+                "position": row.get("position", 0)
+            }
+            if dimension != "date":
+                record[dimension] = row["keys"][0]
+            all_records.append(record)
+
+        current_date += timedelta(days=1)
+
+    if all_records:
+        df_new = pd.DataFrame(all_records)
+        os.makedirs(DATA_PATH, exist_ok=True)
+
+        if os.path.exists(output_file):
+            df_existing = pd.read_csv(output_file)
+            dedupe_key = ["date"] if dimension == "date" else ["date", dimension]
+            df_combined = pd.concat([df_existing, df_new]).drop_duplicates(subset=dedupe_key)
+        else:
+            df_combined = df_new
+
+        df_combined.to_csv(output_file, index=False)
+        print(f"[✓] Updated {output_file} with {len(df_new)} new rows.")
     else:
-        print("[!] No data returned from GSC API.")
+        print(f"[ ] No new data for {dimension}.")
+
 
