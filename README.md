@@ -74,7 +74,7 @@ Run the following:
 
 #### ✅ Update both GSC + GA4 daily:
 ```bash
-python run_tracker.py --update
+python run_tracker.py --gsc
 python run_tracker.py --ga4
 ```
 

@@ -13,7 +13,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run GSC Tracker")
-    parser.add_argument("--update", action="store_true", help="Fetch and append new GSC data")
+    parser.add_argument("--gsc", action="store_true", help="Fetch and append new GSC data")
     parser.add_argument("--ga4", action="store_true", help="Fetch and append new GA4 data")
 
     args = parser.parse_args()
@@ -23,4 +23,4 @@ if __name__ == "__main__":
     elif args.update:
         run()
     else:
-        print("Use --update (GSC) or --ga4 (Analytics) to fetch data.")
+        print("Use --gsc (GSC) or --ga4 (Analytics) to fetch data.")
