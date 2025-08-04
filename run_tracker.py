@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     if args.ga4:
         run_ga4()
-    elif args.update:
+    elif args.gsc:
         run()
     else:
         print("Use --gsc (GSC) or --ga4 (Analytics) to fetch data.")
